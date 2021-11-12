@@ -1,0 +1,148 @@
+<html>
+    <head>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.6.0/chart.min.js" integrity="sha512-GMGzUEevhWh8Tc/njS0bDpwgxdCJLQBWG3Z2Ct+JGOpVnEmjvNx6ts4v6A2XJf1HOrtOsfhv3hBKpK9kE5z8AQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    </head>
+    <body>
+        <div>
+            <canvas id="number"></canvas>
+        </div>
+        <div>
+            <canvas id="duration"></canvas>
+        </div>
+        <div id="message"></div>
+        <script>
+            // colours: reddish, blueish, greenish, yellowish?
+            const COLOURS = ["rgb(255, 99, 132)", "rgb(132, 132, 255)", "rgb(132, 255, 132)", "rgb(99, 132, 255)"];
+            // duration colours: same but darker
+            const DURATION_COLOURS = ["rgb(155,0,32)", "rgb(32,32,150)", "rgb(32,150,32)", "rgb(0,32,150)"];
+
+            const MAXPOINTS = 1800;
+
+            function loadData(names, label, data, dash) {
+                let res = names.map( name => { return {label: name + " (" + label + ")", data: data.map(report => name in report.report ? report.report[name][label] : 0)}});
+                for (let i = 0; i < res.length; i++) {
+                    res[i].borderColor = COLOURS[i % COLOURS.length];
+                    res[i].backgroundColor = dash ? "rgb(132,132,132)" : COLOURS[i % COLOURS.length];
+                    if (dash) {
+                        res[i].borderDash = [5,5];
+                    }
+                }
+
+                return res;
+            }
+
+            fetch(`http://${window.location.hostname}:${window.location.port}/report`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.length == 0) {
+                        console.log("No data yet");
+                        setTimeout(() => {window.location.reload()}, 1000);
+                        document.getElementById("message").innerText = "No data yet, please wait...";
+                    } else {
+                        let firstReport = data[0].report;
+                        const dsNames = Object.keys(firstReport);
+
+                        let labels = data.map( report => report.time );
+
+                        const datasetsNumber = loadData(dsNames, "ops", data, false).concat(loadData(dsNames, "records", data, true));
+                        const chartDataNumber = {
+                            labels,
+                            datasets: datasetsNumber
+                        };
+
+                        const datasetsDuration = loadData(dsNames, "mean duration", data, false).concat(loadData(dsNames, "95th percentile", data, true));
+                        const chartDataDuration = {
+                            labels,
+                            datasets: datasetsDuration
+                        };
+
+                        const configNumber = {
+                            type: "line",
+                            data: chartDataNumber,
+                            options: {
+                                responsive: true,
+                                plugins: {
+                                    legend: {
+                                        position: "top"
+                                    },
+                                    title: {
+                                        display: true,
+                                        text: "Throughput"
+                                    }
+                                }
+                            }
+                        };
+
+                        const configDuration = {
+                            type: "line",
+                            data: chartDataDuration,
+                            options: {
+                                responsive: true,
+                                plugins: {
+                                    legend: {
+                                        position: "top"
+                                    },
+                                    title: {
+                                        display: true,
+                                        text: "Latency"
+                                    }
+                                }
+                            }
+                        };
+
+                        const numberChart = new Chart(
+                            document.getElementById("number"),
+                            configNumber
+                        );
+
+                        const durationChart = new Chart(
+                            document.getElementById("duration"),
+                            configDuration
+                        );
+
+                        let last_time = data[data.length - 1].time;
+
+                        const refresh = function() {
+                            fetch(`http://${window.location.hostname}:${window.location.port}/report?since=${last_time}`)
+                                .then(response => response.json())
+                                .then(newdata => {
+                                    if (newdata.length > 0) {
+                                        last_time = newdata[newdata.length - 1].time;
+                                        
+                                        newdata.forEach( report => labels.push(report.time));
+                                        const updateData = function(i, name, offset, dataset) {
+                                            newdata.map( report => dsNames[i] in report.report ? report.report[dsNames[i]][name] : 0).forEach( x => {dataset[i + offset * dsNames.length].data.push(x);});
+                                        };
+                                        for (let i = 0; i < dsNames.length; i++) {
+                                            updateData(i, "ops", 0, datasetsNumber);
+                                            updateData(i, "records", 1, datasetsNumber);
+                                            updateData(i, "mean duration", 0, datasetsDuration);
+                                            updateData(i, "95th percentile", 1, datasetsDuration);
+                                        }
+
+                                        if (labels.length > MAXPOINTS) {
+                                            let todelete = labels.length - MAXPOINTS;
+                                            labels.splice(0, todelete);
+                                            for (let i = 0; i < dsNames.length; i++) {
+                                                datasetsNumber[i].data.splice(0, todelete);
+                                                datasetsNumber[i + dsNames.length].data.splice(0, todelete);
+
+                                                datasetsDuration[i].data.splice(0, todelete);
+                                                datasetsDuration[i + dsNames.length].data.splice(0, todelete);
+                                            }
+                                        }
+
+                                        numberChart.update("none");
+                                        durationChart.update("none");
+                                    }
+                                });
+
+                            setTimeout(refresh, 1000);
+                        };
+                        setTimeout(refresh, 1000);
+                    }
+                });
+
+        </script>
+    </body>
+</html>

@@ -1,0 +1,16 @@
+{
+    "report": {
+        "interval": 10000
+    },
+    "http": {
+        "enabled": true,
+        "host": "localhost",
+        "port": 8080
+    },
+    "poller": {
+        "interval": 1000,
+        "hosts": [
+            "localhost:3000"
+        ]
+    }
+}
