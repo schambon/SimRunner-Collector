@@ -2,6 +2,7 @@
 Stats collector &amp; front end for SimRunner
 
 Build: mvn package (needs Java 11)
+
 Run: java -jar Collector.jar config.json
 
 In config.json, configure the host/port for the http interface, and add the host:port for the http interfaces of each SimRunner instance you want to poll.
